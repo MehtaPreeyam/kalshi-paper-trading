@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kalshi Bots</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column; a sticky tab bar; each coin tab is a summary strip over a full market ledger. */
+:root {
+  --bg: #ffffff; --panel: #ffffff; --fg: #111418; --muted: #5c6670; --line: #e6e8eb; --accent: #2457c5;
+  --ok: #0b8a4c; --bad: #c2410c; --warn: #9a6200; --okbg: #e3f4e9; --badbg: #fbe5e6; --warnbg: #fbf0d9; --chip: #eef1f5;
+  --btc: #d4600f; --eth: #4b5fd6; --sol: #0f9a8a; --gold: #b07d12; --xrp: #1f7a8c; --doge: #8a6d1d; --bnb: #a0760b; --hype: #2e8b57;
+  --near: #5a4fcf; --zec: #b4232a; --silver: #5f6b7a; --other: #6b7280;
+  --sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0d10; --panel: #12161b; --fg: #eef1f5; --muted: #a9b1bb; --line: #252b33; --accent: #7aa2ff;
+    --ok: #3ddc84; --bad: #ff8a3d; --warn: #f0b44c; --okbg: #15321f; --badbg: #3a1619; --warnbg: #352812; --chip: #222831;
+    --btc: #ff9a4d; --eth: #8c9bff; --sol: #3fd0bd; --gold: #e3b448; --xrp: #4fc3d9; --doge: #d9b24a; --bnb: #f0c040; --hype: #5fd68a;
+    --near: #9d94ff; --zec: #ff6b72; --silver: #b8c2cf; --other: #9aa3ad; color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.5 var(--sans); }
+.wrap { max-width: 1600px; margin: 0 auto; padding-block: 20px 60px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; }
+h1 { font-size: 1.9rem; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+.status { display: flex; align-items: center; gap: 10px; font-size: 1rem; }
+.live { width: 11px; height: 11px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 var(--ok); }
+.live.off { background: var(--bad); }
+@media (prefers-reduced-motion: no-preference) { .live:not(.off) { animation: pulse 2s infinite; } }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent); } 70% { box-shadow: 0 0 0 9px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.note { margin: 6px 0 0; font-size: 1rem; max-width: 80ch; }
+.next { color: var(--muted); font-family: var(--mono); font-size: 0.95rem; }
+nav.tabs { position: sticky; top: 0; z-index: 5; background: var(--bg); display: flex; gap: 6px; padding: 14px 0 10px; border-bottom: 1px solid var(--line); margin-top: 14px; overflow-x: auto; }
+nav.tabs button { font: 600 1.05rem var(--sans); color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 8px 18px; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
+nav.tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+nav.tabs button:focus-visible, .filters button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+section.tab { padding-top: 22px; display: flex; flex-direction: column; gap: 22px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.card h2 { font-size: 1.2rem; margin: 0; display: flex; align-items: center; gap: 10px; }
+.big { font: 500 2.6rem/1.05 var(--mono); letter-spacing: -0.02em; }
+.pos { color: var(--ok); } .neg { color: var(--bad); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px 16px; }
+.stat span { display: block; font-size: 0.95rem; color: var(--muted); }
+.stat b { font: 500 1.3rem var(--mono); }
+.rule { border-top: 1px solid var(--line); padding-top: 10px; font-size: 1rem; }
+h3 { font-size: 1.25rem; margin: 0; }
+.chartbox { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; position: relative; min-height: 300px; }
+.chartbox svg { display: block; width: 100%; height: 280px; overflow: visible; }
+.chartbox text { fill: var(--muted); font: 13px var(--sans); }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 1rem; margin-bottom: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.legend i { width: 18px; height: 4px; border-radius: 2px; display: inline-block; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 0.95rem; box-shadow: 0 6px 20px rgba(0,0,0,.15); white-space: nowrap; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filters button { font: 500 1rem var(--sans); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+.filters button[aria-pressed="true"] { border-color: var(--fg); box-shadow: inset 0 0 0 1px var(--fg); }
+.tablewrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.98rem; }
+th { text-align: left; font-weight: 600; padding: 12px 12px; border-bottom: 2px solid var(--line); white-space: nowrap; position: sticky; top: 0; background: var(--panel); vertical-align: bottom; }
+th small { display: block; font-weight: 400; color: var(--muted); font-size: 0.85rem; }
+td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.n { font-family: var(--mono); text-align: right; white-space: nowrap; }
+th.n { text-align: right; }
+td.nowrap { white-space: nowrap; }
+td.why { min-width: 220px; max-width: 300px; }
+tr.bought td { background: color-mix(in srgb, var(--ok) 5%, transparent); }
+td.need { font-weight: 600; }
+tr.total td { border-top: 2px solid var(--line); font-weight: 600; }
+.pill { display: inline-block; border-radius: 999px; padding: 2px 11px; font-weight: 600; font-size: 0.92rem; white-space: nowrap; }
+.p-buy { background: var(--okbg); color: var(--ok); }
+.p-skip { background: var(--chip); color: var(--fg); }
+.p-won { background: var(--okbg); color: var(--ok); }
+.p-lost { background: var(--badbg); color: var(--bad); }
+.p-open { background: var(--warnbg); color: var(--warn); }
+.realmoney { margin-top: 10px; padding: 8px 12px; border-radius: 8px; background: var(--warnbg); font-size: 1rem; }
+.sub.real { font-weight: 600; }
+.wl { color: var(--bad); font-weight: 600; }
+.ww { color: var(--muted); }
+.sub { display: block; color: var(--muted); font-size: 0.9rem; font-family: var(--sans); text-align: inherit; }
+.empty { padding: 24px; font-size: 1.05rem; }
+details.how { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; }
+details.how summary { cursor: pointer; font-weight: 600; font-size: 1.05rem; }
+details.how li { margin: 6px 0; max-width: 85ch; }
+.cmp td, .cmp th { text-align: right; white-space: nowrap; }
+.cmp td:first-child, .cmp th:first-child { text-align: left; }
+.bt h2 { font-size: 1.2rem; margin: 0; }
+.bt .caveat { font-size: 0.98rem; border-left: 3px solid var(--warn); padding: 4px 0 4px 12px; max-width: 90ch; }
+.proj { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.proj > div { background: var(--chip); border-radius: 8px; padding: 12px 14px; }
+.proj span { display: block; font-size: 0.95rem; color: var(--muted); }
+.proj b { font: 500 1.35rem var(--mono); }
+.proj small { display: block; font-size: 0.92rem; margin-top: 2px; }
+.weeks svg { display: block; width: 100%; height: 230px; overflow: visible; }
+.weeks text { fill: var(--muted); font: 12px var(--sans); }
+/* The Robinhood-style hero (Nov 21, Rishi: "A is good lets do that"): one big number, a line that is green when up and
+   red-orange when down, 1D/1W/1M/YTD/ALL buttons, and scrubbing (drag across the chart to read any moment). */
+.hero { display: flex; flex-direction: column; gap: 10px; }
+.hero-title { font-size: 0.95rem; color: var(--muted); font-weight: 500; }
+.hero-big { font: 700 3rem/1.1 var(--sans); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.hero-chg { font-weight: 600; color: var(--hero); min-height: 1.5em; }
+.hero-chart { position: relative; height: 290px; cursor: crosshair; touch-action: pan-y; }
+.hero-chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.hero-chart text { fill: var(--muted); font: 12px var(--sans); }
+.hero-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.ranges { display: flex; gap: 4px; }
+.ranges button { font: 600 0.95rem var(--sans); border: 0; background: transparent; color: var(--hero); padding: 10px 14px; border-radius: 8px; min-width: 52px; min-height: 44px; cursor: pointer; }
+.ranges button[aria-pressed="true"] { background: var(--hero); color: var(--panel); }
+.ranges button:focus-visible, button.botrow:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.hero-cap { font-size: 0.9rem; color: var(--muted); }
+.hero-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 6px; }
+.hstat { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; background: var(--panel); }
+.hstat span { font-size: 0.88rem; color: var(--muted); }
+.hstat b { font: 700 1.35rem var(--sans); font-variant-numeric: tabular-nums; }
+.botlist { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+button.botrow { font: inherit; color: inherit; background: none; border: 0; border-bottom: 1px solid var(--line); text-align: left; width: 100%;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 14px 6px; cursor: pointer; }
+button.botrow:hover { background: var(--chip); }
+.botrow .nm { flex: 1 1 220px; display: flex; flex-direction: column; }
+.botrow .nm b { font-size: 1.05rem; display: inline-flex; align-items: center; gap: 8px; }
+.botrow .nm span { font-size: 0.9rem; color: var(--muted); }
+.botrow svg { width: 120px; height: 36px; flex: 0 0 auto; }
+.botrow .tot { flex: 0 0 130px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.botrow .tot small { display: block; font-weight: 400; color: var(--muted); font-size: 0.85rem; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Kalshi Bots</h1>
+    <div class="status"><span class="live" id="dot"></span><span id="stamp">Loading…</span><span class="next" id="next"></span></div>
+  </header>
+  <p class="note">Kalshi's 15-minute up/down markets, one bot each. <b>Real money</b> is the bots that trade for real, at the stake shown on each card: they show real orders and real P&amp;L only. <b>Paper</b> is every other bot: the same rule, $100 a trade at Kalshi's real prices and sizes, Kalshi's fee taken out, no order sent. Times are ET. The page updates itself every 15 seconds and again right after each close.</p>
+
+  <nav class="tabs" role="tablist" aria-label="Coins">
+    <button role="tab" id="t-real" aria-selected="true" data-tab="real">Real money</button>
+    <button role="tab" id="t-paper" aria-selected="false" data-tab="paper">Paper</button>
+    <button role="tab" id="t-inverse" aria-selected="false" data-tab="inverse">Inverse</button>
+    <button role="tab" id="t-maker" aria-selected="false" data-tab="maker">Maker</button>
+  </nav>
+
+  <section class="tab" id="tab-real" role="tabpanel">
+    <div class="hero" id="hero-real"></div>
+    <div>
+      <h3>Bots</h3>
+      <div class="botlist" id="bots-real" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h3>Real P&amp;L by period</h3>
+      <p class="note" style="margin:2px 0 0">Settled trades by the ET date they were made. Weeks start Monday. Real money started on Nov 17, 2026, so year to date is everything so far.</p>
+      <div class="tablewrap" style="margin-top:6px">
+        <table class="cmp">
+          <thead><tr><th>Bot</th><th class="n">Today</th><th class="n">This week</th><th class="n">This month</th><th class="n">Year to date</th></tr></thead>
+          <tbody id="realper"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h3>What latency costs</h3>
+      <p class="note" style="margin:2px 0 0">Each real order next to the same order filled instantly at the order book the bot saw when it decided. The difference is what the delay cost: orders that got no fill (a missed win is a cost, a loss we were spared a gain), partly filled orders, and a worse price. Timing is on this Mac's clock, from the decision to Kalshi's reply.</p>
+      <div class="tablewrap" style="margin-top:6px">
+        <table class="cmp">
+          <thead><tr><th>Bot</th><th class="n">Orders</th><th class="n">No fill</th><th class="n">Instant fill</th><th class="n">Real</th><th class="n">Lost to latency</th><th class="n">Decision → reply</th></tr></thead>
+          <tbody id="latency"></tbody>
+        </table>
+      </div>
+    </div>
+    <details class="how">
+      <summary>How the bot decides</summary>
+      <ul>
+        <li>From 2:30 left in each 15-minute market it rechecks on every price change, and buys the favourite the first moment every check passes. At most one trade per market.</li>
+        <li>Until 2:00 left the bar is higher: the coins need a 1.3× bigger base buffer (like BTC), gold and silver a 1.2× bigger volatility buffer.</li>
+        <li><b>Base buffer:</b> a set percent of the price at the start of the window. 1.5× bigger in the 9:30–10:30 AM stock-market open.</li>
+        <li><b>Volatility buffer:</b> a multiple of the coin's normal 1-minute move, scaled to the time left. It shrinks as the close gets closer.</li>
+        <li><b>Needed:</b> the bigger of the two. The coin has to be at least that far past the line.</li>
+        <li>Kalshi's price also has to be 95–99.5¢, and the coin can't be moving sharply against the bet.</li>
+        <li>For a skipped market, the numbers are from the moment it came closest to buying.</li>
+        <li>BTC uses dollar buffers instead of percents: $85 base ($125 at the open), 1.3× bigger from 2:30 to 2:00 left, and a 2.5× volatility buffer. It also skips a market when BTC jumps against the bet or most of the last 30 seconds of Kalshi money goes the other way.</li>
+        <li>Prices: Coinbase for the coins. Hyperliquid for gold and silver, measured from Hyperliquid's own price at the window start.</li>
+      </ul>
+    </details>
+  </section>
+
+  <section class="tab" id="tab-paper" role="tabpanel" hidden>
+    <div class="hero" id="hero-paper"></div>
+    <p class="note" style="margin:0">$100 a trade, bought off Kalshi's live order book (real asks and sizes, up to 99.5¢), fee taken out. No order is sent, so a fill is assumed where the live bots sometimes miss one.</p>
+    <div>
+      <h3>Bots</h3>
+      <div class="botlist" id="bots-paper" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h3>Paper P&amp;L by period</h3>
+      <p class="note" style="margin:2px 0 0">Settled trades by the ET date they were made. Weeks start Monday. The bots started in mid-November 2026, so year to date is everything so far.</p>
+      <div class="tablewrap" style="margin-top:6px">
+        <table class="cmp">
+          <thead><tr><th>Bot</th><th class="n">Today</th><th class="n">This week</th><th class="n">This month</th><th class="n">Year to date</th></tr></thead>
+          <tbody id="paperper"></tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h3>Paper so far vs what the backtest projects</h3>
+      <p class="note">The projection scales each coin's backtest (its year where there is one) to the number of markets it has watched so far.</p>
+      <div class="tablewrap">
+        <table class="cmp">
+          <thead><tr><th>Coin</th><th>Markets watched</th><th>Paper trades</th><th>Projected trades</th><th>Paper P&amp;L</th><th>Projected P&amp;L</th><th>Paper losses</th><th>Projected losses</th></tr></thead>
+          <tbody id="cmp"></tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h3>Backtest, every coin</h3>
+      <p class="note">Each coin's own history on Kalshi with the setting its bot runs now, next to the setting that loses the least (at most 1 trade in 500 on its whole history). $100 a trade, Kalshi's fee taken out. "Second half" = the later half of each coin's markets; ½¢ = if every fill cost half a cent more. Coins marked * have only part of their year downloaded so far (an even sample).</p>
+      <div class="tablewrap">
+        <table class="cmp">
+          <thead><tr><th>Coin</th><th>Setting now</th><th class="n">Trades</th><th class="n">Losses</th><th class="n">P&amp;L</th><th class="n">Second half</th><th class="n">With ½¢</th><th>Lowest-loss setting</th><th class="n">Trades</th><th class="n">Losses</th><th class="n">P&amp;L</th><th class="n">Second half</th></tr></thead>
+          <tbody id="ybt"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-inverse" role="tabpanel" hidden>
+    <div class="hero" id="hero-inverse"></div>
+    <p class="note" style="margin:0" id="invnote"></p>
+    <div class="card">
+      <h3>Inverse vs the real bots, same period</h3>
+      <p class="note" style="margin:2px 0 0">The inverse bets $1 a trade; the real bots bet $20–100. Real P&amp;L counts the real-money trades made since the inverse started. The inverse follows every buy decision, so it can have more trades: a real order sometimes gets no fill, and a coin that stopped itself after a loss keeps deciding on paper.</p>
+      <div class="tablewrap" style="margin-top:6px">
+        <table class="cmp">
+          <thead><tr><th>Coin</th><th class="n">Inverse trades</th><th class="n">Inverse won</th><th class="n">Inverse P&amp;L</th><th class="n">Real trades</th><th class="n">Real losses</th><th class="n">Real P&amp;L</th></tr></thead>
+          <tbody id="invcmp"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Inverse P&amp;L by period</h3>
+      <p class="note" style="margin:2px 0 0">Settled trades by the ET date they were made. Weeks start Monday.</p>
+      <div class="tablewrap" style="margin-top:6px">
+        <table class="cmp">
+          <thead><tr><th>Bot</th><th class="n">Today</th><th class="n">This week</th><th class="n">This month</th><th class="n">Year to date</th></tr></thead>
+          <tbody id="invper"></tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h3>Every inverse trade</h3>
+      <div class="tablewrap" style="margin-top:8px">
+        <table>
+          <thead><tr><th>Market<small>closes</small></th><th>Coin</th><th>Real bot bought</th><th>Inverse bought</th><th class="n">Price<small>contracts</small></th><th>How it closed</th><th class="n">P&amp;L<small>fee taken out</small></th></tr></thead>
+          <tbody id="invrows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <h2 style="font-size:1.4rem;margin:28px 0 0">Underdog rule</h2>
+    <div class="hero" id="hero-underdog"></div>
+    <p class="note" style="margin:0" id="dognote"></p>
+    <div class="card">
+      <h3>Underdog P&amp;L by period</h3>
+      <div class="tablewrap" style="margin-top:6px">
+        <table class="cmp">
+          <thead><tr><th>Bot</th><th class="n">Today</th><th class="n">This week</th><th class="n">This month</th><th class="n">Year to date</th></tr></thead>
+          <tbody id="dogper"></tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h3>Every underdog trade</h3>
+      <div class="tablewrap" style="margin-top:8px">
+        <table>
+          <thead><tr><th>Market<small>closes</small></th><th>Coin</th><th>Favourite</th><th>Bought</th><th class="n">Past the line<small>normal moves</small></th><th class="n">Price<small>contracts</small></th><th>How it closed</th><th class="n">P&amp;L<small>fee taken out</small></th></tr></thead>
+          <tbody id="dogrows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-maker" role="tabpanel" hidden>
+    <div class="hero" id="hero-maker"></div>
+    <p class="note" style="margin:0" id="mknote"></p>
+    <div class="card">
+      <h3>Maker bid vs the live rule, same markets</h3>
+      <p class="note" style="margin:2px 0 0">Paper only, $100 a market. A maker fill pays no fee; whatever the bid has not filled 5 s after the live rule's buy signal is bought at the asks (≤ 99.5¢, fee taken out). <b>Queue</b> is the realistic score: the contracts already waiting at our price when our bid landed must trade first. <b>Last in line</b> only counts a trade below our price; <b>first in line</b> counts any trade at our price. The live rule row is what the real BTC bot's own buy would have paid at the book then.</p>
+      <div class="tablewrap" style="margin-top:6px">
+        <table class="cmp">
+          <thead><tr><th>Score</th><th class="n">Markets traded</th><th class="n">With a maker fill</th><th class="n">Losses</th><th class="n">Avg maker price</th><th class="n">P&amp;L</th></tr></thead>
+          <tbody id="mkcmp"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Maker P&amp;L by period</h3>
+      <div class="tablewrap" style="margin-top:6px">
+        <table class="cmp">
+          <thead><tr><th>Score</th><th class="n">Today</th><th class="n">This week</th><th class="n">This month</th><th class="n">Year to date</th></tr></thead>
+          <tbody id="mkper"></tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h3>Decision in every market</h3>
+      <div class="tablewrap" style="margin-top:8px">
+        <table>
+          <thead><tr><th>Market<small>closes</small></th><th>Maker bot<small>from 5:00 left</small></th><th>Live rule<small>as the maker bot sees it, from 2:30</small></th><th>Real BTC bot<small>its own log</small></th></tr></thead>
+          <tbody id="mkdec"></tbody>
+        </table>
+      </div>
+      <p class="sub" id="mkdecnote" style="margin-top:6px"></p>
+    </div>
+    <div>
+      <h3>Every market it bid in or the live rule bought</h3>
+      <div class="tablewrap" style="margin-top:8px">
+        <table>
+          <thead><tr><th>Market<small>closes</small></th><th>Side</th><th class="n">Bid from<small>left · posts</small></th><th class="n">Queue<small>maker · then taker</small></th><th class="n">Last in line<small>maker · taker</small></th><th class="n">First in line<small>maker · taker</small></th><th class="n">Live rule<small>taker</small></th><th>How it closed</th></tr></thead>
+          <tbody id="mkrows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab" id="coin" role="tabpanel" hidden>
+    <div class="hero" id="hero-coin"></div>
+    <div class="card" id="coinhead"></div>
+    <div class="card bt" id="btcard"></div>
+    <div class="filters" role="group" aria-label="Show">
+      <button data-f="all" aria-pressed="true">All markets</button>
+      <button data-f="bought" aria-pressed="false">Bought</button>
+      <button data-f="skipped" aria-pressed="false">Skipped</button>
+      <button data-f="wouldlose" aria-pressed="false">Skipped, would have lost</button>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th>Market<small>closes</small></th>
+          <th>Decision</th>
+          <th>How it closed<small>Kalshi settle vs the line</small></th>
+          <th>Result</th>
+          <th>Why</th>
+          <th>Bet</th>
+          <th class="n">Time left<small>at that moment</small></th>
+          <th class="n">Past the line</th>
+          <th class="n">Base buffer</th>
+          <th class="n">Volatility buffer</th>
+          <th class="n">Needed<small>bigger of the two</small></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="card weeks" id="weekscard">
+      <h2 id="weekstitle" style="font-size:1.2rem;margin:0">Backtest P&amp;L by week</h2>
+      <svg id="weeks" role="img" aria-label="Backtest P&L by week"></svg>
+    </div>
+    <div id="losscard">
+      <h3>Every backtest loss</h3>
+      <div class="tablewrap" style="margin-top:10px">
+        <table>
+          <thead><tr><th>Market<small>closes</small></th><th>Bet</th><th class="n">Time left</th><th class="n">Past the line</th><th class="n">Base buffer</th><th class="n">Volatility buffer</th><th class="n">Loss</th></tr></thead>
+          <tbody id="btloss"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const COLOR_VARS = {BTC: 'btc', ETH: 'eth', SOL: 'sol', GOLD: 'gold', XRP: 'xrp', DOGE: 'doge', BNB: 'bnb', HYPE: 'hype', NEAR: 'near', ZEC: 'zec', SILVER: 'silver'};
+const COLORS = new Proxy({}, {get: (_, a) => `var(--${COLOR_VARS[a] || 'other'})`});
+const NAMES = new Proxy({BTC: 'Bitcoin (BTC)', ETH: 'Ethereum (ETH)', SOL: 'Solana (SOL)', GOLD: 'Gold', SILVER: 'Silver', XRP: 'XRP', DOGE: 'Dogecoin (DOGE)',
+                         BNB: 'BNB', HYPE: 'Hyperliquid (HYPE)', NEAR: 'NEAR', ZEC: 'Zcash (ZEC)'}, {get: (o, a) => o[a] || a});
+const SHORT = (a) => a === 'GOLD' ? 'Gold' : a === 'SILVER' ? 'Silver' : a;
+const COINS = () => ['BTC', ...Object.keys(DATA.summary).filter((a) => a !== 'BTC')];
+const LIVE = () => COINS().filter((a) => a === 'BTC' || (DATA.summary[a].live || {}).on);
+const PAPER = () => COINS().filter((a) => !LIVE().includes(a));           // paper is shown only for bots that do not trade for real
+const OVERVIEWS = ['real', 'paper', 'inverse', 'maker'];
+function showPanels() {
+  document.getElementById('tab-real').hidden = TAB !== 'real';
+  document.getElementById('tab-paper').hidden = TAB !== 'paper';
+  document.getElementById('tab-inverse').hidden = TAB !== 'inverse';
+  document.getElementById('tab-maker').hidden = TAB !== 'maker';
+  document.getElementById('coin').hidden = OVERVIEWS.includes(TAB);
+}
+function buildTabs() {
+  const nav = document.querySelector('nav.tabs');
+  for (const a of COINS()) {
+    if (document.getElementById('t-' + a)) continue;
+    const b = el('button'); b.setAttribute('role', 'tab'); b.id = 't-' + a; b.dataset.tab = a; b.setAttribute('aria-selected', String(TAB === a));
+    const sw = el('i', 'sw'); sw.style.background = COLORS[a]; b.append(sw, SHORT(a));
+    b.addEventListener('click', () => showTab(a));
+    nav.append(b);
+  }
+  if (!OVERVIEWS.includes(TAB) && !DATA.summary[TAB]) TAB = 'real';
+  document.querySelectorAll('nav.tabs button').forEach((x) => x.setAttribute('aria-selected', String(x.dataset.tab === TAB)));
+  showPanels();
+}
+let DATA = null, TAB = 'real', FILTER = 'all';
+const PUBLIC = !['localhost', '127.0.0.1'].includes(location.hostname);   // the GitHub Pages copy (bot/publish_pages.py): data is a 15-min snapshot
+
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const usd = (v) => v == null ? '—' : (v < 0 ? '−$' : v > 0 ? '+$' : '$') + Math.abs(v).toFixed(2);
+const money = (v, a) => v == null ? '—' : '$' + (Math.abs(v) < 0.01 ? v.toFixed(5) : Math.abs(v) < 1 ? v.toFixed(3) : v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+const gap = (d, line) => { const dp = line >= 100 ? 2 : line >= 1 ? 4 : 6; return '$' + (+Math.abs(d).toFixed(dp)).toLocaleString('en-US', {minimumFractionDigits: line >= 100 ? 2 : 0, maximumFractionDigits: dp}); };   // how far the settle ended from the line
+const level = (v) => v == null ? '—' : '$' + v.toLocaleString('en-US', {minimumFractionDigits: v < 1 ? 4 : v < 100 ? 3 : 2, maximumFractionDigits: v < 1 ? 6 : v < 100 ? 3 : 2});
+const mmss = (s) => s == null ? '—' : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+const hm = (t) => { if (!t) return '—'; const [d, c] = t.split(' '); let [h, m] = c.split(':').map(Number); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return `${d.slice(5).replace('-', '/')} ${h}:${String(m).padStart(2, '0')} ${ap}`; };
+
+function showTab(t) {
+  TAB = t;
+  document.querySelectorAll('nav.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
+  showPanels();
+  render();
+}
+document.querySelectorAll('nav.tabs button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+document.querySelectorAll('.filters button').forEach((b) => b.addEventListener('click', () => {
+  FILTER = b.dataset.f;
+  document.querySelectorAll('.filters button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  render();
+}));
+
+function statBlock(label, value, cls) { const d = el('div', 'stat'); d.append(el('span', null, label), el('b', cls, value)); return d; }
+
+function card(a, s, compact) {
+  const c = compact ? el('div', 'card') : document.getElementById('coinhead');
+  c.replaceChildren();
+  const h = el('h2'); const sw = el('i', 'sw'); sw.style.background = COLORS[a]; h.append(sw, NAMES[a]);
+  const L = s.live || {}, n = L.on ? L : s;                            // a live coin's card shows real money only, not the $100 paper buys
+  const big = el('div', 'big ' + (n.pnl > 0 ? 'pos' : n.pnl < 0 ? 'neg' : ''), usd(n.pnl));
+  const st = el('div', 'stats');
+  st.append(statBlock('Trades', String(n.trades) + (n.open ? ` +${n.open} open` : '')), statBlock('Losses', String(n.losses), n.losses ? 'neg' : ''),
+            statBlock('Markets watched', String(s.watched)), statBlock('Skipped, would have lost', String(s.saved)));
+  const rule = el('div', 'rule', a === 'BTC'
+    ? `Base buffer $${s.base_usd} ($${s.open_usd} at the open), ×${s.early_mult} before 2:00 left · volatility buffer ${s.vol_x}× · buys from ${Math.floor(s.watch_start / 60)}:${String(s.watch_start % 60).padStart(2, '0')} left · price from ${s.source}`
+    : `Base buffer ${s.base_pct}% of price · volatility buffer ${s.vol_x}× the ${s.sd_minutes || 60}-minute normal move · price from ${s.source}`);
+  c.append(h, big, st);
+  if (!compact) {                                                    // the coin's own page: today, this week, this month, this year
+    const x = periodTotals(L.on ? 'running_live' : 'running', a), ps = el('div', 'stats');
+    for (const [p, label] of PERIODS) {
+      const v = Math.round(x[p].pnl * 100) / 100;
+      const b = statBlock(label, x[p].n ? usd(v) : '—', v > 0 ? 'pos' : v < 0 ? 'neg' : '');
+      b.append(el('span', null, `${x[p].n} trade${x[p].n === 1 ? '' : 's'}${x[p].losses ? ` · ${x[p].losses} lost` : ''}`));
+      ps.append(b);
+    }
+    c.append(ps);
+  }
+  c.append(rule);
+  if (!s.running) c.append(el('div', 'neg', 'This bot is not running'));
+  if (L.on) {
+    const lv = el('div', 'realmoney');
+    lv.append(el('b', null, 'Real money'), el('span', null, ` $${L.stake} a trade`));
+    if (L.stopped) lv.append(el('div', 'neg', 'Stopped: ' + L.stopped));
+    c.append(lv);
+  } else c.append(el('div', 'rule', 'Paper only (no real money)'));
+  if (compact) { c.style.cursor = 'pointer'; c.tabIndex = 0; c.addEventListener('click', () => showTab(a)); c.addEventListener('keydown', (e) => { if (e.key === 'Enter') showTab(a); }); }
+  return c;
+}
+
+function renderYearTable() {                                         // every coin's year backtest: its setting now vs its lowest-loss one
+  const tb = document.getElementById('ybt'); tb.replaceChildren();
+  const sg = (x) => 'n ' + (x > 0 ? 'pos' : x < 0 ? 'neg' : '');
+  for (const a of COINS()) {
+    const y = a === 'BTC' ? DATA.backtest_btc : (DATA.backtest_year || {})[a];
+    if (!y) continue;
+    const tr = tb.insertRow(), cl = (t, cls) => { const c = tr.insertCell(); c.textContent = t; if (cls) c.className = cls; };
+    const rate = (x) => `${x.losses} (${(x.losses / Math.max(x.trades, 1) * 100).toFixed(2)}%)`;
+    cl(NAMES[a] + (y.partial ? ' *' : '')); cl(y.setting);
+    cl(y.trades.toLocaleString(), 'n'); cl(rate(y), 'n' + (y.losses ? '' : ' pos')); cl(usd(y.pnl), sg(y.pnl));
+    cl(y.held_out.label.startsWith('Second') ? usd(y.held_out.pnl) : '—', y.held_out.label.startsWith('Second') ? sg(y.held_out.pnl) : 'n');
+    cl(y.slip != null ? usd(y.slip) : '—', y.slip != null ? sg(y.slip) : 'n');
+    const f = y.safe;
+    if (!f) { for (let i = 0; i < 5; i++) cl(i ? '—' : (a === 'BTC' ? 'not tested this way' : '—'), i ? 'n' : ''); continue; }
+    const same = f.setting === y.setting;
+    cl(same ? 'same as now' : f.setting); cl(f.trades.toLocaleString(), 'n'); cl(rate(f), 'n' + (f.losses ? '' : ' pos')); cl(usd(f.pnl), sg(f.pnl));
+    cl(usd(f.held_out), sg(f.held_out));
+  }
+}
+
+const PERIODS = [['day', 'Today'], ['week', 'This week'], ['month', 'This month'], ['ytd', 'Year to date']];
+function periodStarts() {                                            // ET dates (the server runs on ET); weeks start Monday
+  const [y, m, d] = DATA.generated.slice(0, 10).split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d)), back = (t.getUTCDay() + 6) % 7;
+  const mon = new Date(t - back * 86400000).toISOString().slice(0, 10);
+  return {day: DATA.generated.slice(0, 10), week: mon, month: DATA.generated.slice(0, 8) + '01', ytd: DATA.generated.slice(0, 5) + '01-01'};
+}
+function periodTotals(key, a) {                                      // settled trades per period from DATA[key][a] = [[time ET, pnl], ...]
+  const st = periodStarts(), out = {};
+  for (const [p] of PERIODS) out[p] = {pnl: 0, n: 0, losses: 0};
+  for (const [t, v] of (DATA[key] || {})[a] || []) {
+    for (const [p] of PERIODS) if (t.slice(0, 10) >= st[p]) { out[p].pnl += v; out[p].n += 1; out[p].losses += v < 0 ? 1 : 0; }
+  }
+  return out;
+}
+function periodCell(tr, x) {
+  const c = tr.insertCell(); c.className = 'n';
+  const p = Math.round(x.pnl * 100) / 100;
+  c.append(el('span', p > 0 ? 'pos' : p < 0 ? 'neg' : '', x.n ? usd(p) : '—'),
+           el('span', 'sub', x.n ? `${x.n} trade${x.n === 1 ? '' : 's'}${x.losses ? ` · ${x.losses} lost` : ''}` : 'no trades'));
+}
+function renderPeriods(tbodyId, key, coins, noTotal) {                        // P&L today, this week, this month and this year, per bot and in total
+  const tb = document.getElementById(tbodyId); tb.replaceChildren();
+  const tot = {};
+  for (const [p] of PERIODS) tot[p] = {pnl: 0, n: 0, losses: 0};
+  for (const a of coins) {
+    const x = periodTotals(key, a), tr = tb.insertRow();
+    tr.insertCell().textContent = NAMES[a];
+    for (const [p] of PERIODS) { periodCell(tr, x[p]); for (const k of ['pnl', 'n', 'losses']) tot[p][k] += x[p][k]; }
+  }
+  if (coins.length > 1 && !noTotal) {
+    const tr = tb.insertRow(); tr.className = 'total';
+    const c = tr.insertCell(); c.append(el('b', null, 'All bots'));
+    for (const [p] of PERIODS) periodCell(tr, tot[p]);
+  }
+}
+
+function renderReal() {                                              // the Real money tab: the bots that send real orders
+  hero('hero-real', 'running_live', LIVE(), 'Real-money P&L · ' + (LIVE().map(SHORT).join(', ') || 'no live bots'));
+  botList('bots-real', 'running_live', LIVE());
+  renderPeriods('realper', 'running_live', LIVE());
+  renderLatency();
+}
+
+function renderLatency() {                                           // bot/latency_report.py: instant fill at the book seen vs the real order
+  const tb = document.getElementById('latency'); tb.replaceChildren();
+  const L = DATA.latency || {};
+  if (L.error || !L.total) { const c = tb.insertRow().insertCell(); c.colSpan = 7; c.textContent = L.error ? 'Not available: ' + L.error : 'No real orders yet.'; return; }
+  const money = (tr, v, sub) => { const c = tr.insertCell(); c.className = 'n'; c.append(el('span', v > 0 ? 'pos' : v < 0 ? 'neg' : '', usd(v))); if (sub) c.append(el('span', 'sub', sub)); };
+  const row = (name, x, total) => {
+    const tr = tb.insertRow(); if (total) tr.className = 'total';
+    const c = tr.insertCell(); total ? c.append(el('b', null, name)) : (c.textContent = NAMES[name]);
+    const n = tr.insertCell(); n.className = 'n'; n.append(el('span', null, String(x.orders)), el('span', 'sub', `${x.partial} partly filled`));
+    const nf = tr.insertCell(); nf.className = 'n';
+    nf.append(el('span', null, String(x.no_fill)), el('span', 'sub', `${x.missed_wins} would have won · ${x.missed_losses} lost`));
+    money(tr, x.instant); money(tr, x.real);
+    const lc = tr.insertCell(); lc.className = 'n';
+    lc.append(el('span', x.lost > 0 ? 'neg' : x.lost < 0 ? 'pos' : '', usd(-x.lost)),
+              el('span', 'sub', `missed ${usd(-x.lost_missed)} · partial ${usd(-x.lost_partial)} · price ${usd(-x.lost_price)}`));
+    const t = x.decided_back, tc = tr.insertCell(); tc.className = 'n';
+    tc.append(el('span', null, t ? `${t.median} ms` : '—'), el('span', 'sub', t ? `90% under ${t.p90} ms · ${t.n} timed` : 'not timed yet'));
+  };
+  for (const a of Object.keys(L.coins)) row(a, L.coins[a], false);
+  if (Object.keys(L.coins).length > 1) row('All bots', L.total, true);
+}
+
+function renderPaper() {                                             // the Paper tab: every bot that does not trade for real
+  hero('hero-paper', 'running', PAPER(), `Paper P&L · ${PAPER().length} bots at $100 a trade`);
+  botList('bots-paper', 'running', PAPER());
+  renderPeriods('paperper', 'running', PAPER());
+  const tb = document.getElementById('cmp'); tb.replaceChildren();
+  for (const a of PAPER()) {
+    const s = DATA.summary[a], pr = s.projected || {}, tr = tb.insertRow();
+    const cells = [NAMES[a], s.watched, s.trades, pr.trades != null ? '~' + pr.trades.toFixed(0) : '—', usd(s.pnl), pr.pnl != null ? 'about ' + usd(pr.pnl) : '—',
+                   s.losses, pr.losses != null ? '~' + pr.losses.toFixed(2) : '—'];
+    cells.forEach((v, i) => { const c = tr.insertCell(); c.textContent = String(v); if (i === 4) c.className = s.pnl > 0 ? 'pos' : s.pnl < 0 ? 'neg' : ''; });
+  }
+  renderYearTable();
+}
+
+const INV = ['BTC', 'ETH', 'SOL'];
+function renderInverse() {                                           // the Inverse tab: bot/inverse_paper.py, $1 on the other side of every live buy
+  const v = DATA.inverse;
+  if (!v) { document.getElementById('invnote').textContent = 'The inverse paper bot has no data yet (paper_trading_inverse/state.json).'; return; }
+  hero('hero-inverse', 'running_inverse', INV, 'Inverse paper P&L · $1 against every BTC, ETH and SOL buy', true);
+  const note = document.getElementById('invnote');
+  note.replaceChildren(el('b', v.running ? '' : 'neg', v.running ? 'Running. ' : 'Not running. '),
+    `Paper only, no orders. Since ${hm(v.since)} ET, whenever a real-money bot buys the favourite, this buys the other side of the same market with $1 at its ask then, Kalshi's fee taken out. It loses about $1.07 each time the real bot wins and makes about $99 each time the real bot loses, so it breaks even at roughly one real loss in 93 trades. Green dots are its wins.`);
+  const tb = document.getElementById('invcmp'); tb.replaceChildren();
+  const tot = {n: 0, w: 0, p: 0, rn: 0, rl: 0, rp: 0};
+  const cell = (tr, txt, cls) => { const c = tr.insertCell(); c.className = 'n' + (cls ? ' ' + cls : ''); c.textContent = txt; };
+  for (const a of INV) {
+    const it = (DATA.running_inverse || {})[a] || [], rl = ((DATA.running_live || {})[a] || []).filter(([t]) => t >= v.since);
+    const x = {n: it.length, w: it.filter(([, p]) => p > 0).length, p: it.reduce((s, [, p]) => s + p, 0),
+               rn: rl.length, rl: rl.filter(([, p]) => p < 0).length, rp: rl.reduce((s, [, p]) => s + p, 0)};
+    for (const k in tot) tot[k] += x[k];
+    const tr = tb.insertRow(); tr.insertCell().textContent = NAMES[a];
+    cell(tr, x.n); cell(tr, x.w); cell(tr, usd(x.p), sgn(x.p)); cell(tr, x.rn); cell(tr, x.rl); cell(tr, usd(x.rp), sgn(x.rp));
+  }
+  const tr = tb.insertRow(); tr.className = 'total'; tr.insertCell().append(el('b', null, 'All three'));
+  cell(tr, tot.n); cell(tr, tot.w); cell(tr, usd(tot.p), sgn(tot.p)); cell(tr, tot.rn); cell(tr, tot.rl); cell(tr, usd(tot.rp), sgn(tot.rp));
+  renderPeriods('invper', 'running_inverse', INV);
+  const rows = document.getElementById('invrows'); rows.replaceChildren();
+  for (const t of v.trades) {
+    const r = rows.insertRow(), done = t.win === true || t.win === false;
+    const m = r.insertCell(); m.append(el('b', null, hm(t.close_et)), el('span', 'sub', 'bought ' + hm(t.time_et).split(' ').slice(1).join(' ')));
+    r.insertCell().textContent = SHORT(t.coin);
+    r.insertCell().textContent = t.bot_side;
+    r.insertCell().textContent = t.side;
+    const pc = r.insertCell(); pc.className = 'n'; pc.append(el('span', null, (t.ask * 100).toFixed(1) + '¢'), el('span', 'sub', `${t.contracts} for $${t.cost.toFixed(2)}`));
+    r.insertCell().textContent = done ? t.result : 'not settled yet';
+    const pl = r.insertCell(); pl.className = 'n'; pl.append(el('span', done ? (t.win ? 'pos' : 'neg') : '', done ? usd(t.pnl) : '—'), el('span', 'sub', done ? (t.win ? 'won: the real bot lost' : 'lost') : 'open'));
+  }
+  if (v.count > v.trades.length) { const r = rows.insertRow(), c = r.insertCell(); c.colSpan = 7; c.className = 'note'; c.textContent = `Newest ${v.trades.length} of ${v.count} shown.`; }
+  renderUnderdog();
+}
+
+function renderUnderdog() {                                          // bot/underdog_paper.py: $1 on the underdog when the coin is barely past the line
+  const v = DATA.underdog, note = document.getElementById('dognote');
+  if (!v) { note.textContent = 'The underdog paper bot has no data yet (paper_trading_underdog/state.json).'; return; }
+  const ru = v.rule || {};
+  hero('hero-underdog', 'running_underdog', INV, `Underdog paper P&L · $${ru.stake || 1} a trade on BTC, ETH and SOL`, true);
+  note.replaceChildren(el('b', v.running ? '' : 'neg', v.running ? 'Running. ' : 'Not running. '),
+    `Paper only, no orders. Since ${hm(v.since)} ET, from 2:30 left, the first moment a coin is less than ${ru.max_cushion_x || 1} normal move past the line while the other side costs ${Math.round((ru.max_ask || 0.05) * 100)}¢ or less, it buys $1 of that cheap side off Kalshi's order book. Full-year backtest: about 1 in 12 win, +$5,400 to +$8,300 a coin; the last 60 days were much weaker (−$24 to +$447). Green dots are its wins.`);
+  renderPeriods('dogper', 'running_underdog', INV);
+  const rows = document.getElementById('dogrows'); rows.replaceChildren();
+  if (!v.trades.length) { const r = rows.insertRow(), c = r.insertCell(); c.colSpan = 8; c.className = 'empty'; c.textContent = 'No trades yet.'; }
+  for (const t of v.trades) {
+    const r = rows.insertRow(), done = t.win === true || t.win === false;
+    const m = r.insertCell(); m.append(el('b', null, hm(t.close_et)), el('span', 'sub', 'bought ' + hm(t.time_et).split(' ').slice(1).join(' ') + ` · ${mmss(t.secs_left)} left`));
+    r.insertCell().textContent = SHORT(t.coin);
+    r.insertCell().textContent = t.fav_side;
+    r.insertCell().textContent = t.side;
+    const cx = r.insertCell(); cx.className = 'n'; cx.textContent = t.cushion_x.toFixed(2) + '×';
+    const pc = r.insertCell(); pc.className = 'n'; pc.append(el('span', null, (t.ask * 100).toFixed(1) + '¢'), el('span', 'sub', `${t.contracts} for $${t.cost.toFixed(2)}`));
+    r.insertCell().textContent = done ? t.result : 'not settled yet';
+    const pl = r.insertCell(); pl.className = 'n'; pl.append(el('span', done ? (t.win ? 'pos' : 'neg') : '', done ? usd(t.pnl) : '—'), el('span', 'sub', done ? (t.win ? 'won' : 'lost') : 'open'));
+  }
+}
+
+
+const MK = ['Queue', 'Last in line', 'First in line', 'Live rule (taker)'];
+const MKK = {'Queue': 'queue', 'Last in line': 'pess', 'First in line': 'opt'};
+function renderMaker() {                                             // the Maker tab: bot/maker_paper.py, BTC, paper only
+  const v = DATA.maker, note = document.getElementById('mknote');
+  if (!v) { note.textContent = 'The maker paper bot has no data yet (paper_trading_maker/).'; return; }
+  hero('hero-maker', 'running_maker', ['Queue'], 'Maker bid paper P&L · BTC, $100 a market (queue fills)');
+  note.replaceChildren(el('b', v.running ? '' : 'neg', v.running ? 'Running. ' : 'Not running. '),
+    `Paper only, no orders${v.since ? ', since ' + hm(v.since) + ' ET' : ''}. From 5:00 left, while every live BTC test passes (HAR 3.5×, $85 base, warning signs), it keeps a bid at the market's best bid for BTC's favourite, capped at 99¢, never below 95¢ and never above the market. 100 ms on every post, price change and cancel, and sellers in a cancel's gap still fill it. Backtest (every 4th market, Dec–Sep, last in line, 100 ms): 1,701 trades, 12 losses, +$1,173 vs the live rule's +$446 on the same markets. Red dots are losses.`);
+  const tb = document.getElementById('mkcmp'); tb.replaceChildren();
+  const cell = (tr, txt, cls) => { const c = tr.insertCell(); c.className = 'n' + (cls ? ' ' + cls : ''); c.textContent = txt; };
+  for (const lab of MK) {
+    const k = MKK[lab], tr = tb.insertRow(); tr.insertCell().textContent = lab;
+    let rs, mk = 0, lost = 0, pnl = 0, mkn = 0, mkc = 0;
+    if (k) {
+      rs = v.markets.filter((m) => m[k].pnl != null && (m[k].maker_n || m[k].fb_n));
+      for (const m of rs) { pnl += m[k].pnl; if (!m.win) lost++; if (m[k].maker_n) { mk++; mkn += m[k].maker_n; mkc += m[k].maker_n * m[k].maker_px; } }
+    } else {
+      rs = v.markets.filter((m) => m.taker && m.taker.pnl != null);
+      for (const m of rs) { pnl += m.taker.pnl; if (m.taker.pnl < 0) lost++; }
+    }
+    cell(tr, rs.length); cell(tr, k ? mk : '—'); cell(tr, lost); cell(tr, k && mkn ? (100 * mkc / mkn).toFixed(2) + '¢' : '—'); cell(tr, usd(pnl), sgn(pnl));
+  }
+  renderPeriods('mkper', 'running_maker', MK, true);
+  const dec = document.getElementById('mkdec'); dec.replaceChildren();
+  let star = false, broke = false;
+  const why = (x, d) => { if (!x) return '—'; if (d.approx && /past target/.test(x.reason)) star = true; return `${x.reason}${d.approx && /past target/.test(x.reason) ? '*' : ''} · ${mmss(x.left)} left`; };
+  for (const d of v.decisions || []) {
+    const r = dec.insertRow(); r.insertCell().append(el('b', null, hm(d.close_et)));
+    const a = r.insertCell(), b = r.insertCell();
+    if (d.bid) {
+      a.append(el('b', 'pos', `bid ${d.side}`), el('span', 'sub', d.first_pass_left ? `from ${mmss(d.first_pass_left)} left · ${d.posts} posts` : `${d.posts} posts`));
+      b.textContent = d.trigger_left ? `signal at ${mmss(d.trigger_left)} left` : 'no signal';
+    } else if (d.broken) {
+      broke = true; a.append(el('span', 'neg', 'not checked'), el('span', 'sub', "couldn't read Kalshi's line (fixed 10:01 PM)")); b.textContent = '—';
+    } else {
+      a.append(el('span', null, 'no bid'), el('span', 'sub', why(d.maker, d)));
+      b.append(el('span', null, d.blocked ? 'blocked by a warning sign' : 'no signal'), el('span', 'sub', why(d.live, d)));
+    }
+    const c = r.insertCell(), real = d.real || '—';
+    if (/BUY/.test(real)) c.append(el('b', 'pos', 'bought'), el('span', 'sub', real)); else c.append(el('span', null, real.startsWith('skip') ? 'skip' : real), el('span', 'sub', real.replace(/^skip: (closest: )?/, '')));
+  }
+  if (!(v.decisions || []).length) { const r = dec.insertRow(), c = r.insertCell(); c.colSpan = 4; c.className = 'empty'; c.textContent = 'No markets logged yet.'; }
+  document.getElementById('mkdecnote').textContent = [star ? '* Before 11:45 PM the "closest" amount was picked by its text, not its size, so it can understate how far BTC got (the decision itself was right).' : '',
+    "The real bot's skip note is from its last check at the furthest test it reached, not necessarily its closest moment."].filter(Boolean).join(' ');
+  const rows = document.getElementById('mkrows'); rows.replaceChildren();
+  const leg = (x) => { const s = []; if (x.maker_n) s.push(`${x.maker_n} @ ${(x.maker_px * 100).toFixed(1)}¢`); if (x.fb_n) s.push(`then ${x.fb_n} @ ${(x.fb_px * 100).toFixed(1)}¢`); return s.join(' · ') || 'none'; };
+  for (const o of v.open || []) {
+    const r = rows.insertRow(), m = r.insertCell(); m.append(el('b', null, hm(o.close_et)), el('span', 'sub', 'settling'));
+    r.insertCell().textContent = o.side;
+    const c = r.insertCell(); c.className = 'n'; c.textContent = o.first_pass_left ? `${mmss(o.first_pass_left)} · ${o.posts}` : '—';
+    for (const k of ['queue', 'pess', 'opt']) { const x = r.insertCell(); x.className = 'n'; x.textContent = o.got[k] ? `${o.got[k]} filled` : '—'; }
+    r.insertCell().textContent = '—'; r.insertCell().textContent = 'not settled yet';
+  }
+  if (!v.markets.length && !(v.open || []).length) { const r = rows.insertRow(), c = r.insertCell(); c.colSpan = 8; c.className = 'empty'; c.textContent = 'No markets yet: it bids only when every live test passes.'; }
+  for (const t of v.markets) {
+    const r = rows.insertRow(), m = r.insertCell(); m.append(el('b', null, hm(t.close_et)), el('span', 'sub', t.trigger_left ? `live signal ${mmss(t.trigger_left)} left` : 'no live signal'));
+    r.insertCell().textContent = t.side;
+    const c = r.insertCell(); c.className = 'n'; c.textContent = t.first_pass_left ? `${mmss(t.first_pass_left)} · ${t.posts}` : '—';
+    for (const k of ['queue', 'pess', 'opt']) {
+      const x = t[k], cc = r.insertCell(); cc.className = 'n';
+      cc.append(el('span', x.pnl == null || !(x.maker_n || x.fb_n) ? '' : sgn(x.pnl), x.maker_n || x.fb_n ? usd(x.pnl) : '—'), el('span', 'sub', leg(x)));
+    }
+    const lc = r.insertCell(); lc.className = 'n';
+    lc.append(el('span', t.taker ? sgn(t.taker.pnl) : '', t.taker ? usd(t.taker.pnl) : '—'), el('span', 'sub', t.taker ? `${t.taker.n} @ ${(t.taker.px * 100).toFixed(1)}¢` : 'no buy'));
+    r.insertCell().textContent = `${t.result} · ${t.win ? 'won' : 'lost'}`;
+  }
+}
+
+const RANGES = [['1D', 'day', 'today'], ['1W', 'week', 'this week'], ['1M', 'month', 'this month'], ['YTD', 'ytd', 'this year'], ['ALL', null, 'all time']];
+const RANGE = {}, SCRUB = {};                                        // chosen range per hero (kept across reloads); heroes being scrubbed are not redrawn
+const NS = 'http://www.w3.org/2000/svg';
+const svgEl = (t, at) => { const e = document.createElementNS(NS, t); for (const k in at) e.setAttribute(k, at[k]); return e; };
+const parseET = (s) => new Date(s.replace(' ', 'T'));                 // the page runs on the same Mac as the bots, in ET
+const sgn = (v) => v > 0.004 ? 'pos' : v < -0.004 ? 'neg' : '';
+const clock = (d) => d.toLocaleString('en-US', {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'});
+
+function rangeTrades(key, coins, r) {                                // settled trades of these bots in range r, oldest first
+  const st = r[1] ? periodStarts()[r[1]] : '';
+  return coins.flatMap((a) => ((DATA[key] || {})[a] || []).filter(([t]) => t.slice(0, 10) >= st).map(([t, p]) => ({t: parseET(t), p, a})))
+    .sort((x, y) => x.t - y.t);
+}
+function sparkPath(vs, W, H) {
+  if (vs.length < 2) vs = [0, vs[0] || 0];
+  let lo = Math.min(0, ...vs), hi = Math.max(0, ...vs); const pad = (hi - lo) * 0.1 || 1; lo -= pad; hi += pad;
+  return vs.map((v, i) => `${i ? 'L' : 'M'}${(i / (vs.length - 1) * W).toFixed(1)} ${(H - (v - lo) / (hi - lo) * H).toFixed(1)}`).join(' ');
+}
+
+function hero(id, key, coins, title, dotWins) {                      // big number + chart + range buttons + key numbers for these bots
+  if (SCRUB[id]) return;
+  const box = document.getElementById(id), r = RANGES.find((x) => x[0] === (RANGE[id] || 'ALL'));
+  const now = parseET(DATA.generated), every = rangeTrades(key, coins, RANGES[4]), tr = rangeTrades(key, coins, r);
+  const start = every.length ? new Date(+every[0].t - 15 * 60e3) : now;
+  let t0 = r[1] ? parseET(periodStarts()[r[1]] + ' 00:00') : start;
+  const clipped = t0 < start; if (clipped) t0 = start;               // nothing before the first trade: the chart starts there
+  let c = 0;
+  const pts = [{t: t0, v: 0}].concat(tr.map((x) => ({t: x.t, v: (c += x.p), p: x.p, a: x.a})));
+  pts.push({t: now, v: c, now: true});
+  const total = Math.round(c * 100) / 100;
+  box.style.setProperty('--hero', total < 0 ? 'var(--bad)' : 'var(--ok)');
+  box.replaceChildren();
+  const head = el('div'); head.style.cssText = 'display:flex;flex-direction:column;gap:4px';
+  const big = el('div', 'hero-big', usd(total)), chg = el('div', 'hero-chg');
+  const idle = () => { big.textContent = usd(total); chg.textContent = tr.length ? `${usd(total)} ${r[2]} · ${tr.length} trade${tr.length === 1 ? '' : 's'}` : `No settled trades ${r[2]}`; };
+  idle();
+  head.append(el('span', 'hero-title', title), big, chg);
+
+  const chart = el('div', 'hero-chart'), svg = svgEl('svg', {role: 'img', 'aria-label': `${title}, ${r[2]}: ${usd(total)}`});
+  chart.append(svg);
+  box.append(head, chart);
+  const W = chart.clientWidth || 900, H = 290, m = {t: 12, b: 26};
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const vs = pts.map((q) => q.v);
+  let lo = Math.min(0, ...vs), hi = Math.max(0, ...vs); const pad = (hi - lo) * 0.08 || 1; lo -= pad; hi += pad;
+  const span = Math.max(1, now - t0);
+  const x = (d) => (d - t0) / span * W, y = (v) => m.t + (H - m.t - m.b) * (hi - v) / (hi - lo);
+  svg.append(svgEl('line', {x1: 0, x2: W, y1: y(0), y2: y(0), stroke: 'var(--muted)', 'stroke-opacity': 0.6, 'stroke-dasharray': '3 5'}));
+  const zl = svgEl('text', {x: W, y: y(0) - 6, 'text-anchor': 'end'}); zl.textContent = '$0'; svg.append(zl);
+  svg.append(svgEl('path', {d: pts.map((q, i) => `${i ? 'L' : 'M'}${x(q.t).toFixed(1)} ${y(q.v).toFixed(1)}`).join(' '), fill: 'none', stroke: 'var(--hero)',
+                            'stroke-width': 2.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round'}));
+  for (const q of pts) if (dotWins ? q.p > 0 : q.p < 0) svg.append(svgEl('circle', {cx: x(q.t), cy: y(q.v), r: 4, fill: dotWins ? 'var(--ok)' : 'var(--bad)'}));   // every loss (inverse: win) gets a dot
+  const tl = svgEl('text', {x: 0, y: H - 6}); tl.textContent = clock(t0); svg.append(tl);
+  const tn = svgEl('text', {x: W, y: H - 6, 'text-anchor': 'end'}); tn.textContent = 'now'; svg.append(tn);
+  const vline = svgEl('line', {y1: 0, y2: H - m.b, stroke: 'var(--muted)', 'stroke-width': 1, visibility: 'hidden'});
+  const dot = svgEl('circle', {r: 6, fill: 'var(--hero)', stroke: 'var(--panel)', 'stroke-width': 2, cx: x(now), cy: y(c)});
+  svg.append(vline, dot);
+  const show = (q) => {
+    vline.setAttribute('x1', x(q.t)); vline.setAttribute('x2', x(q.t)); vline.setAttribute('visibility', 'visible');
+    dot.setAttribute('cx', x(q.t)); dot.setAttribute('cy', y(q.v));
+    big.textContent = usd(Math.round(q.v * 100) / 100);
+    chg.textContent = q.now ? 'now' : q.p == null ? clock(q.t) : `${clock(q.t)} · ${SHORT(q.a)} ${usd(q.p)}`;
+  };
+  chart.onpointermove = (ev) => {
+    SCRUB[id] = true;
+    const rc = svg.getBoundingClientRect(), mx = (ev.clientX - rc.left) * W / rc.width;
+    let best = pts[0];
+    for (const q of pts) if (Math.abs(x(q.t) - mx) < Math.abs(x(best.t) - mx)) best = q;
+    show(best);
+  };
+  chart.onpointerleave = () => { SCRUB[id] = false; vline.setAttribute('visibility', 'hidden'); dot.setAttribute('cx', x(now)); dot.setAttribute('cy', y(c)); idle(); };
+
+  const bar = el('div', 'hero-bar'), grp = el('div', 'ranges');
+  grp.setAttribute('role', 'group'); grp.setAttribute('aria-label', 'Range');
+  for (const q of RANGES) {
+    const b = el('button', null, q[0]); b.type = 'button'; b.setAttribute('aria-pressed', String(q === r));
+    b.addEventListener('click', () => { RANGE[id] = q[0]; render(); });
+    grp.append(b);
+  }
+  bar.append(grp, el('span', 'hero-cap', clipped ? `From the first trade, ${clock(start)}` : r[0] === '1D' ? 'Since midnight ET' : `Since ${clock(t0)}`));
+  box.append(bar);
+
+  const wins = tr.filter((q) => q.p > 0), losses = tr.filter((q) => q.p < 0);
+  const avgW = wins.length ? wins.reduce((s, q) => s + q.p, 0) / wins.length : null, avgL = losses.length ? losses.reduce((s, q) => s + q.p, 0) / losses.length : null;
+  let peak = 0, dd = 0, ddAt = null;
+  for (const q of pts) { peak = Math.max(peak, q.v); if (q.v - peak < dd) { dd = q.v - peak; ddAt = q.t; } }
+  const st = el('div', 'hero-stats');
+  const stat = (label, val, sub, cls) => { const d = el('div', 'hstat'); d.append(el('span', null, label), el('b', cls || '', val), el('span', null, sub)); st.append(d); };
+  stat('Trades', String(tr.length), `${wins.length} won · ${losses.length} lost`);
+  stat('Loss rate', tr.length ? (losses.length / tr.length * 100).toFixed(1) + '%' : '—',
+       avgW != null && avgL != null ? `break-even is about ${(avgW / (avgW - avgL) * 100).toFixed(1)}%` : losses.length ? '' : 'no losses in this range', '');
+  stat('Average win / loss', `${avgW != null ? usd(avgW) : '—'} / ${avgL != null ? usd(avgL) : '—'}`,
+       avgW && avgL ? (-avgL >= avgW ? `one loss ≈ ${Math.round(-avgL / avgW)} wins` : `one win ≈ ${Math.round(avgW / -avgL)} losses`) : dotWins ? 'one win pays about 99× the bet' : 'one loss costs about the whole stake');
+  stat('Max drawdown', dd < 0 ? usd(Math.round(dd * 100) / 100) : '$0.00', dd < 0 ? `low point ${clock(ddAt)}` : 'never below its high', dd < 0 ? 'neg' : '');
+  box.append(st);
+}
+
+function botList(id, key, coins) {                                   // one row per bot: status, a small line over the hero's range, P&L in that range
+  const box = document.getElementById(id), hid = 'hero-' + id.slice(5), r = RANGES.find((x) => x[0] === (RANGE[hid] || 'ALL'));
+  box.replaceChildren();
+  if (!coins.length) { box.append(el('div', 'empty', key === 'running_live' ? 'No bot trades for real right now.' : 'Every bot trades for real; nothing is paper.')); return; }
+  for (const a of coins) {
+    const s = DATA.summary[a], L = s.live || {}, live = key === 'running_live', tr = rangeTrades(key, [a], r);
+    let c = 0; const vs = [0, ...tr.map((q) => (c += q.p))]; const tot = Math.round(c * 100) / 100;
+    const n = live ? L : s, lost = tr.filter((q) => q.p < 0).length;
+    const row = el('button', 'botrow'); row.type = 'button';
+    row.setAttribute('aria-label', `${NAMES[a]}: ${usd(tot)} ${r[2]}. Open its page`);
+    const nm = el('div', 'nm'), b = el('b'), sw = el('i', 'sw'); sw.style.background = COLORS[a]; b.append(sw, NAMES[a]);
+    const status = !s.running ? 'Bot not running' : live && L.stopped ? 'Stopped: ' + L.stopped : live ? `Live · $${L.stake} a trade` : 'Paper · $100 a trade';
+    const sub = el('span', !s.running || (live && L.stopped) ? 'neg' : '', `${status} · ${tr.length} trade${tr.length === 1 ? '' : 's'}${lost ? `, ${lost} lost` : ''}${n.open ? ` · ${n.open} open` : ''}`);
+    nm.append(b, sub);
+    const sv = svgEl('svg', {viewBox: '0 0 120 36', preserveAspectRatio: 'none', 'aria-hidden': 'true'});
+    sv.append(svgEl('path', {d: sparkPath(vs, 120, 36), fill: 'none', stroke: tot < 0 ? 'var(--bad)' : 'var(--ok)', 'stroke-width': 1.75, 'vector-effect': 'non-scaling-stroke'}));
+    const t = el('div', 'tot ' + sgn(tot), usd(tot)); t.append(el('small', null, r[2]));
+    row.append(nm, sv, t);
+    row.addEventListener('click', () => showTab(a));
+    box.append(row);
+  }
+}
+
+function renderBacktest(a) {
+  const b = (DATA.backtest || {})[a], c = document.getElementById('btcard'), s = DATA.summary[a];
+  c.replaceChildren();
+  const y = a === 'BTC' ? DATA.backtest_btc : (DATA.backtest_year || {})[a];
+  document.getElementById('weekstitle').textContent = y ? 'Backtest P&L by month' : 'Backtest P&L by week';
+  if (y) { renderYear(a, y, s, c); return; }
+  if (a === 'BTC') { document.getElementById('weekscard').hidden = document.getElementById('losscard').hidden = true; c.append(el('div', null, 'No backtest file. Run analysis/tick_full_year.py early.')); return; }
+  document.getElementById('weekscard').hidden = document.getElementById('losscard').hidden = false;
+  if (!b) { c.append(el('div', null, 'No backtest file. Run analysis/multi_site_backtest.py.')); return; }
+  c.append(el('h2', null, `Backtest: ${b.period} (${Math.round(b.days)} days, ${b.markets.toLocaleString()} markets)`));
+  const pr = s.projected || {};
+  const proj = el('div', 'proj');
+  const box = (label, val, small) => { const d = el('div'); d.append(el('span', null, label), el('b', null, val)); if (small) d.append(el('small', null, small)); proj.append(d); };
+  box('Trades', b.trades.toLocaleString(), `${b.per_day_trades} a day · ${(b.trade_rate * 100).toFixed(0)}% of markets`);
+  box('Losses', String(b.losses), b.trades ? `${(b.losses / b.trades * 100).toFixed(2)}% of trades` : '');
+  box('P&L', usd(b.pnl), `${usd(b.per_day_pnl)} a day · ${usd(b.pnl_per_trade)} a trade`);
+  box('If every fill cost ½¢ more', usd(b.pnl_slip), 'a check on how thin the edge is');
+  box('Month 1 · Month 2', `${usd(b.months[0].pnl)} · ${usd(b.months[1].pnl)}`, `${b.months[0].losses} and ${b.months[1].losses} losses`);
+  box('Worst week', usd(b.worst_week), `${b.losing_weeks} losing week${b.losing_weeks === 1 ? '' : 's'} of ${b.weeks.length}`);
+  c.append(proj);
+  const p = el('div', 'proj');
+  const pbox = (label, paper, projected) => { const d = el('div'); d.append(el('span', null, label), el('b', null, paper), el('small', null, 'Backtest projects ' + projected)); p.append(d); };
+  c.append(el('h2', null, `Paper so far vs projection (${s.watched} markets watched)`));
+  pbox('Trades', String(s.trades), pr.trades != null ? '~' + pr.trades.toFixed(1) : '—');
+  pbox('P&L', usd(s.pnl), pr.pnl != null ? 'about ' + usd(pr.pnl) : '—');
+  pbox('Losses', String(s.losses), pr.losses != null ? '~' + pr.losses.toFixed(2) : '—');
+  c.append(p);
+  c.append(el('div', 'caveat', `These settings were picked using these same two months, so live results will likely come in a bit worse. Prices in the backtest: ${b.feed}.`));
+  drawBars(a, b.weeks);
+  lossTable(b.loss_list);
+}
+
+function renderYear(a, b, s, c) {                                  // a year-long backtest (BTC: tick_full_year.py; others: year_backtest.py)
+  document.getElementById('weekscard').hidden = document.getElementById('losscard').hidden = false;
+  c.append(el('h2', null, b.title), el('div', 'note', b.note));
+  const stake = (s.live || {}).on ? (s.live.stake || 40) : null;
+  const proj = el('div', 'proj');
+  const box = (label, val, small) => { const d = el('div'); d.append(el('span', null, label), el('b', null, val)); if (small) d.append(el('small', null, small)); proj.append(d); };
+  const daily = b.per_day_trades != null;                              // not shown for a partial (sampled) year
+  box('Trades', b.trades.toLocaleString(), (daily ? `${b.per_day_trades} a day · ` : '') + `${(b.trade_rate * 100).toFixed(0)}% of markets`);
+  box('Losses', String(b.losses), `${(b.losses / b.trades * 100).toFixed(2)}% of trades (break-even is about 1.4%)`);
+  box('P&L at $100 a trade', usd(b.pnl), (daily ? `${usd(b.per_day_pnl)} a day · ` : '') + `${usd(b.pnl_per_trade)} a trade`);
+  if (stake && stake !== 100) box(`At your $${stake} a trade`, 'about ' + usd(Math.round(b.pnl * stake / 100)), daily ? 'the same trades, scaled' : 'the same trades, scaled (markets tested so far)');
+  box(b.held_out.label, usd(b.held_out.pnl), `${b.held_out.trades.toLocaleString()} trades · ${b.held_out.losses} losses`);
+  if (b.slip != null) box('If every fill cost ½¢ more', usd(b.slip), 'a check on how thin the edge is');
+  const worst = b.months.reduce((x, m) => m.pnl < x.pnl ? m : x);
+  box('Worst month', usd(worst.pnl), `${monthName(worst.week)} · ${worst.losses} losses`);
+  c.append(proj);
+  if (a !== 'BTC') {
+    const pr = s.projected || {}, p = el('div', 'proj'), own = stake ? s.live : s, k = stake ? stake / 100 : 1;   // a real-money coin: its real trades, projection scaled to its stake
+    const pbox = (label, got, projected) => { const d = el('div'); d.append(el('span', null, label), el('b', null, got), el('small', null, 'Backtest projects ' + projected)); p.append(d); };
+    c.append(el('h2', null, stake ? `Real so far vs projection (${s.watched} markets watched, $${stake} a trade)` : `Paper so far vs projection (${s.watched} markets watched, $100 paper buys)`));
+    pbox('Trades', String(own.trades), pr.trades != null ? '~' + pr.trades.toFixed(1) : '—');
+    pbox('P&L', usd(own.pnl), pr.pnl != null ? 'about ' + usd(Math.round(pr.pnl * k * 100) / 100) : '—');
+    pbox('Losses', String(own.losses), pr.losses != null ? '~' + pr.losses.toFixed(2) : '—');
+    c.append(p);
+  }
+  c.append(el('h2', null, b.table_title));
+  const extra = b.variants.some((v) => v.slip != null);
+  const t = el('table', 'cmp'), hd = t.createTHead().insertRow();
+  for (const h of ['Setting', 'Trades', 'Losses', 'P&L at $100'].concat(extra ? ['With ½¢ slippage', 'Second half'] : [])) {
+    const th = document.createElement('th'); th.textContent = h; if (h !== 'Setting') th.className = 'n'; hd.append(th);
+  }
+  const tbd = t.createTBody();
+  for (const v of b.variants) {
+    const tr = tbd.insertRow(); if (v.live) tr.className = 'bought';
+    const cl = (x, cls) => { const q = tr.insertCell(); q.textContent = x; if (cls) q.className = cls; };
+    const sg = (x) => 'n ' + (x > 0 ? 'pos' : x < 0 ? 'neg' : '');
+    cl(v.label); cl(v.trades.toLocaleString(), 'n'); cl(String(v.losses), 'n'); cl(usd(v.pnl), sg(v.pnl));
+    if (extra) { cl(usd(v.slip), sg(v.slip)); cl(usd(v.held_out), sg(v.held_out)); }
+  }
+  const w = el('div', 'tablewrap'); w.append(t); c.append(w);
+  c.append(el('div', 'caveat', b.caveat));
+  if (b.before) renderBefore(c, b.before);
+  drawBars(a, b.months);
+  lossTable(b.loss_list);
+}
+
+function renderBefore(c, g) {                                        // gold before Kalshi listed it: price only (analysis/gold_price_only.py)
+  const k = g.calib, all = g.dec.est_pnl + g.janjul.est_pnl + k.pnl;
+  c.append(el('h2', null, 'Before Kalshi listed gold: Dec 2025 to Jul 2026, price only'));
+  c.append(el('div', 'note', `Kalshi's gold markets start Aug 3, 2026, so there are no Kalshi prices before that. This replays gold's live tests on `
+    + `Binance gold prices in every 15-minute slot Kalshi now lists, and counts how often they would have bought and how often gold then finished on the `
+    + `wrong side. P&L is an estimate: Aug-Nov had ${(g.ratio * 100).toFixed(0)} real trades per 100 would-buys (the ask was often above 99.5¢), `
+    + `${usd(k.avg_pnl_per_win)} a win and ${usd(k.avg_loss)} a loss at $100, and every reversal is counted as a loss.`));
+  const p = el('div', 'proj');
+  const box = (label, val, small) => { const d = el('div'); d.append(el('span', null, label), el('b', null, val), el('small', null, small)); p.append(d); };
+  box('Whole year, estimated', 'about ' + usd(Math.round(all)), `Dec-Jul estimate + Aug-Nov real-Kalshi backtest (${usd(k.pnl)})`);
+  box('Jan to Jul', 'about ' + usd(Math.round(g.janjul.est_pnl)), `${g.janjul.buys.toLocaleString()} would-buys · ${g.janjul.losses} reversed (${(g.janjul.losses / g.janjul.buys * 100).toFixed(2)}%)`);
+  box('December 2025', 'about ' + usd(Math.round(g.dec.est_pnl)), `${g.dec.buys} would-buys · ${g.dec.losses} reversed: Binance's gold contract was days old and thin over the holidays`);
+  box('Check on Aug to Nov', `${k.proxy_losses} vs ${k.losses}`, `reversals this method finds vs losses in the real-Kalshi backtest (${k.trades.toLocaleString()} trades)`);
+  c.append(p);
+  const t = el('table', 'cmp'), hd = t.createTHead().insertRow();
+  for (const h of ['Month', 'Would-buy', 'Reversed', 'Est. trades', 'Est. P&L at $100']) { const th = document.createElement('th'); th.textContent = h; if (h !== 'Month') th.className = 'n'; hd.append(th); }
+  const tbd = t.createTBody();
+  for (const m of g.months) {
+    const tr = tbd.insertRow(), cl = (x, cls) => { const q = tr.insertCell(); q.textContent = x; if (cls) q.className = cls; };
+    cl(monthName(m.month)); cl(m.buys.toLocaleString(), 'n'); cl(String(m.losses), 'n'); cl(m.est_trades.toLocaleString(), 'n');
+    cl(usd(m.est_pnl), 'n ' + (m.est_pnl > 0 ? 'pos' : m.est_pnl < 0 ? 'neg' : ''));
+  }
+  const w = el('div', 'tablewrap'); w.append(t); c.append(w);
+  c.append(el('div', 'caveat', 'An estimate, not a backtest: no Kalshi prices, Binance\'s price instead of Pyth\'s settle, and most reversals finished '
+    + 'within $1 of the line, where the two feeds can disagree. The live bot reads Hyperliquid.'));
+}
+
+const monthName = (k) => new Date(k + '-15T12:00').toLocaleString('en-US', {month: 'short', year: '2-digit'});
+
+function drawBars(a, weeks) {                                         // weekly (or, for BTC, monthly) backtest P&L
+  const b = {weeks};
+  const svg = document.getElementById('weeks'); while (svg.firstChild) svg.firstChild.remove();
+  const W = svg.clientWidth || 800, H = 230, m = {t: 12, r: 10, b: 34, l: 56}, NS = 'http://www.w3.org/2000/svg';
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const mk = (t, at, txt) => { const e = document.createElementNS(NS, t); for (const k in at) e.setAttribute(k, at[k]); if (txt != null) e.textContent = txt; svg.append(e); return e; };
+  const lo = Math.min(0, ...b.weeks.map((w) => w.pnl)), hi = Math.max(1, ...b.weeks.map((w) => w.pnl));
+  const y = (v) => m.t + (H - m.t - m.b) * (hi - v) / (hi - lo), bw = (W - m.l - m.r) / b.weeks.length;
+  for (const v of [lo, 0, hi]) { mk('line', {x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: 'var(--line)'}); mk('text', {x: m.l - 8, y: y(v) + 4, 'text-anchor': 'end'}, usd(Math.round(v))); }
+  b.weeks.forEach((w, i) => {
+    const x = m.l + i * bw + bw * 0.15;
+    mk('rect', {x, y: Math.min(y(w.pnl), y(0)), width: bw * 0.7, height: Math.max(1, Math.abs(y(w.pnl) - y(0))), fill: w.pnl < 0 ? 'var(--bad)' : COLORS[a]});
+    mk('text', {x: x + bw * 0.35, y: (w.pnl < 0 ? y(w.pnl) + 14 : y(w.pnl) - 5), 'text-anchor': 'middle'}, (w.pnl < 0 ? '−$' : '$') + Math.abs(Math.round(w.pnl)));
+    if (b.weeks.length < 14 || i % 2 === 0) mk('text', {x: x + bw * 0.35, y: H - 12, 'text-anchor': 'middle'}, w.week.length === 7 ? monthName(w.week) : w.week.slice(5).replace('-', '/'));
+  });
+}
+
+function lossTable(losses) {
+  const b = {loss_list: losses};
+  const tb = document.getElementById('btloss'); tb.replaceChildren();
+  if (!b.loss_list.length) { const tr = tb.insertRow(), td = tr.insertCell(); td.colSpan = 7; td.className = 'empty'; td.textContent = 'No losses in the backtest.'; }
+  for (const l of b.loss_list) {
+    const tr = tb.insertRow(), td = (t, cls) => { const x = tr.insertCell(); x.textContent = t; if (cls) x.className = cls; };
+    td(hm(l.close_et), 'nowrap'); td(`${l.side} at ${l.price_c}¢`, 'nowrap'); td(mmss(l.secs_left), 'n'); td(money(l.lead), 'n'); td(money(l.base), 'n'); td(money(l.vol), 'n'); td(usd(l.pnl), 'n neg');
+  }
+}
+
+function renderCoin(a) {
+  const live = (DATA.summary[a].live || {}).on;
+  hero('hero-coin', live ? 'running_live' : 'running', [a], `${NAMES[a]} · ${live ? 'real-money' : 'paper'} P&L`);
+  card(a, DATA.summary[a], false);
+  renderBacktest(a);
+  const tb = document.getElementById('rows'); tb.replaceChildren();
+  let rows = DATA.markets[a];
+  if (FILTER === 'bought') rows = rows.filter((r) => r.bought);
+  if (FILTER === 'skipped') rows = rows.filter((r) => !r.bought);
+  if (FILTER === 'wouldlose') rows = rows.filter((r) => r.would === 'Would have lost');
+  if (!rows.length) { const tr = tb.insertRow(), td = tr.insertCell(); td.colSpan = 11; td.className = 'empty'; td.textContent = 'No markets here yet.'; return; }
+  for (const r of rows) {
+    const tr = tb.insertRow(); if (r.bought) tr.className = 'bought';
+    const td = (cls) => { const c = tr.insertCell(); if (cls) c.className = cls; return c; };
+    let c = td('nowrap'); c.textContent = hm(r.close_et);
+    c = td(); c.append(el('span', 'pill ' + (r.bought ? 'p-buy' : 'p-skip'), r.bought ? 'Bought' : 'Skipped'));
+    c = td('nowrap');
+    if (r.closed) {
+      const d = r.settled != null && r.line != null ? r.settled - r.line : null;
+      c.textContent = d == null ? r.closed : d === 0 ? `${r.closed}, right on the line` : `${r.closed}, ${gap(d, r.line)} ${d > 0 ? 'above' : 'below'} line`;
+      c.append(el('span', 'sub', `${level(r.settled)} vs line ${level(r.line)}`));
+    }
+    else c.textContent = 'Not settled yet';
+    c = td('nowrap');
+    const live = (DATA.summary[a].live || {}).on, v = r.live;          // a live coin shows its real order only, never the $100 paper buy
+    if (live && r.bought) {
+      if (v && v.contracts) {
+        const res = v.result || 'Open';
+        c.append(el('span', 'pill ' + ({Won: 'p-won', Lost: 'p-lost', Open: 'p-open'})[res], res));
+        if (v.pnl != null) c.append(el('span', 'sub' + (v.pnl < 0 ? ' neg' : ''), usd(v.pnl)));
+      } else {
+        c.append(el('span', 'pill p-skip', !v ? 'Not sent' : v.status === 'no fill' ? 'No fill' : v.status === 'skipped' ? 'Not sent' : v.status));
+        c.append(el('span', 'sub', !v ? 'no real order' : v.status === 'no fill' ? 'price moved, $0' : v.error || '$0'));
+      }
+    } else if (r.status) { c.append(el('span', 'pill ' + ({Won: 'p-won', Lost: 'p-lost', Open: 'p-open'})[r.status], r.status)); if (r.pnl != null) c.append(el('span', 'sub', usd(r.pnl))); }
+    else if (r.would) c.append(el('span', r.would === 'Would have lost' ? 'wl' : 'ww', r.would));
+    else c.textContent = '—';
+    c = td('why'); c.textContent = r.why;
+    c = td('nowrap');
+    if (r.side) {
+      const real = live && r.bought && v && v.contracts;
+      c.textContent = `${r.side} at ${real ? v.price_c : r.ask_c}¢`;
+      if (real) c.append(el('span', 'sub', `${v.contracts} contracts`));
+    }
+    else c.textContent = '—';
+    td('n').textContent = mmss(r.secs_left);
+    td('n').textContent = money(r.lead);
+    td('n').textContent = money(r.base);
+    td('n').textContent = money(r.vol);
+    const need = r.base == null && r.vol == null ? null : Math.max(r.base ?? 0, r.vol ?? 0);
+    c = td('n need'); c.textContent = money(need);
+    if (need != null && r.lead != null) c.append(el('span', 'sub', r.bought || r.lead >= need ? 'met' : `short ${money(need - r.lead)}`));
+  }
+}
+
+function render() {
+  if (!DATA) return;
+  if (TAB === 'real') renderReal(); else if (TAB === 'paper') renderPaper(); else if (TAB === 'inverse') renderInverse(); else if (TAB === 'maker') renderMaker(); else renderCoin(TAB);
+}
+
+async function load() {
+  try {
+    const r = await fetch('data.json', {cache: 'no-store'});
+    DATA = await r.json();
+    buildTabs();
+    document.getElementById('dot').classList.toggle('off', !DATA.bot_running);
+    document.getElementById('stamp').textContent = (DATA.bot_running ? 'All bots running · updated ' : 'A bot is NOT running · updated ') +
+      new Date(DATA.generated.replace(' ', 'T')).toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit', second: '2-digit'})
+      + (PUBLIC ? ' ET · public copy, refreshed every 15 min' : '');
+    render();
+  } catch (e) {
+    document.getElementById('dot').classList.add('off');
+    document.getElementById('stamp').textContent = 'Can’t reach the site server';
+  }
+}
+if (location.hash) { try { history.replaceState(null, '', location.pathname); } catch (e) {} }   // no #tab in the address: the page is live, not a bookmark
+load();
+setInterval(load, 15000);                                            // every 15 s, plus right after each close and again when its settle is in
+setInterval(() => {
+  const left = 900 - Math.floor(Date.now() / 1000) % 900;
+  document.getElementById('next').textContent = `· next close in ${mmss(left)}`;
+  if (left === 896 || left === 850 || left === 800) load();
+}, 1000);
+window.addEventListener('resize', () => { if (DATA) render(); });
+</script>
+</body>
+</html>
